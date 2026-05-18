@@ -1,6 +1,5 @@
 # Offline Hugging Face Dataset Downloader
-
-Downloads a Hugging Face dataset on an internet-connected machine, packages it into a `.tar.gz` archive suited for transfer to an offline machine for training.
+Downloads one or more Hugging Face datasets on an internet-connected machine, saves them locally, and packages each dataset into a `.tar.gz` archive for transfer to an offline training machine.
 
 This is useful when your training machine does not have internet access.
 
@@ -8,20 +7,20 @@ This is useful when your training machine does not have internet access.
 
 ```text
 .
-├── dataset_config.yaml
-├── download_hf_dataset.py
-└── README.md
+|-- dataset_config.yaml
+|-- download_hf_dataset.py
+`-- README.md
 ```
 
 ## Overview
 
 The workflow is:
 
-1. Edit `dataset_config.yaml` with the Hugging Face dataset ID.
+1. Edit `dataset_config.yaml` with one or more Hugging Face dataset IDs.
 2. Run `download_hf_dataset.py` on a machine with internet access.
-3. Transfer the generated `.tar.gz` file to the offline training machine.
-4. Extract the archive.
-5. Load the dataset locally with `load_from_disk()`.
+3. Transfer the generated `.tar.gz` archive files to the offline training machine.
+4. Extract the archives.
+5. Load each dataset locally with `load_from_disk()`.
 
 ## Install dependencies
 
@@ -31,39 +30,90 @@ On the internet-connected machine:
 pip install -U datasets huggingface_hub pyyaml
 ```
 
-## Configure the dataset
+## Configure datasets
 
 Edit `dataset_config.yaml`:
 
 ```yaml
-dataset_id: "HuggingFaceH4/ultrachat_200k"
-
-config_name: null
-split: null
-revision: "main"
-
 mode: "prepared"
-
-output_dir: "./offline_dataset"
-archive_path: "./offline_dataset.tar.gz"
-
+output_dir: "./offline_datasets"
+archive_path: null
 token_env: "HF_TOKEN"
 trust_remote_code: false
+
+datasets:
+  - dataset_id: "HuggingFaceH4/ultrachat_200k"
+    config_name: null
+    split: null
+    revision: "main"
+
+  - dataset_id: "stanfordnlp/imdb"
+    config_name: null
+    split: "train"
+    revision: "main"
 ```
+
+With this config, the script creates one folder per dataset under `output_dir`:
+
+```text
+offline_datasets/
+|-- ultrachat_200k/
+|   `-- ultrachat_200k.tar.gz
+`-- imdb/
+    `-- imdb.tar.gz
+```
+
+The dataset folder name is derived from the last part of `dataset_id`. For example, `HuggingFaceH4/ultrachat_200k` becomes `ultrachat_200k`.
 
 ### Important fields
 
 | Field | Description |
 |---|---|
+| `datasets` | List of datasets to download in one run |
 | `dataset_id` | Hugging Face dataset repo ID, for example `"HuggingFaceH4/ultrachat_200k"` |
 | `config_name` | Optional dataset subset/config name |
 | `split` | Optional split such as `"train"`, `"validation"`, or `"test"` |
 | `revision` | Dataset branch, tag, or commit hash |
 | `mode` | Use `"prepared"` for offline training |
-| `output_dir` | Local folder where the dataset will be saved |
-| `archive_path` | Final archive file to transfer |
+| `output_dir` | Base folder where per-dataset folders are created |
+| `archive_path` | Optional archive file path. Set to `null` for the default per-dataset archive |
 | `token_env` | Environment variable containing your Hugging Face token |
 | `trust_remote_code` | Set to `true` only if the dataset requires custom dataset code |
+
+Top-level fields are defaults shared by every dataset. Dataset entries can override them when needed.
+
+## Archive behavior
+
+When `archive_path` is `null`, each archive is written inside its dataset folder using the same name as the folder:
+
+```text
+./offline_datasets/ultrachat_200k/ultrachat_200k.tar.gz
+```
+
+You can still set `archive_path` for a single-dataset config or override it per dataset. Avoid using the same archive path for multiple datasets, because the script rejects duplicate archive outputs.
+
+## Single-dataset config
+
+The script still accepts the older single-dataset shape:
+
+```yaml
+dataset_id: "HuggingFaceH4/ultrachat_200k"
+config_name: null
+split: null
+revision: "main"
+mode: "prepared"
+output_dir: "./offline_datasets"
+archive_path: null
+token_env: "HF_TOKEN"
+trust_remote_code: false
+```
+
+This creates:
+
+```text
+offline_datasets/ultrachat_200k/
+offline_datasets/ultrachat_200k/ultrachat_200k.tar.gz
+```
 
 ## Recommended mode
 
@@ -80,10 +130,10 @@ The offline machine can then load it with:
 ```python
 from datasets import load_from_disk
 
-ds = load_from_disk("./offline_dataset")
+ds = load_from_disk("./offline_datasets/ultrachat_200k")
 ```
 
-## Download a public dataset
+## Download datasets
 
 Run this on the internet-connected machine:
 
@@ -91,13 +141,7 @@ Run this on the internet-connected machine:
 python download_hf_dataset.py --config dataset_config.yaml
 ```
 
-This creates an archive such as:
-
-```text
-offline_dataset.tar.gz
-```
-
-Transfer this file to the offline training machine.
+Transfer the generated `.tar.gz` files to the offline training machine.
 
 ## Download a private or gated dataset
 
@@ -115,19 +159,18 @@ python download_hf_dataset.py --config dataset_config.yaml
 
 Do not put your token directly into the YAML file.
 
-
 ## Extract on the offline machine
 
 On the offline training machine:
 
 ```bash
-tar -xzf offline_dataset.tar.gz
+tar -xzf ultrachat_200k.tar.gz
 ```
 
 This should create:
 
 ```text
-offline_dataset/
+ultrachat_200k/
 ```
 
 ## Load the dataset offline
@@ -137,21 +180,12 @@ In your training code:
 ```python
 from datasets import load_from_disk
 
-ds = load_from_disk("./offline_dataset")
+ds = load_from_disk("./ultrachat_200k")
 
 print(ds)
 ```
 
-If you downloaded all splits, `ds` will usually be a `DatasetDict`, for example:
-
-```text
-DatasetDict({
-    train: Dataset(...)
-    test: Dataset(...)
-})
-```
-
-If you downloaded a single split, `ds` may be a single `Dataset`.
+If you downloaded all splits, `ds` will usually be a `DatasetDict`. If you downloaded a single split, `ds` may be a single `Dataset`.
 
 ## Force offline mode
 
@@ -166,24 +200,18 @@ Then run your training job as normal.
 
 ## Example: download only the train split
 
-Update `dataset_config.yaml`:
-
 ```yaml
-dataset_id: "HuggingFaceH4/ultrachat_200k"
-config_name: null
-split: "train"
-revision: "main"
 mode: "prepared"
-output_dir: "./offline_dataset"
-archive_path: "./offline_dataset.tar.gz"
+output_dir: "./offline_datasets"
+archive_path: null
 token_env: "HF_TOKEN"
 trust_remote_code: false
-```
 
-Then run:
-
-```bash
-python download_hf_dataset.py --config dataset_config.yaml
+datasets:
+  - dataset_id: "HuggingFaceH4/ultrachat_200k"
+    config_name: null
+    split: "train"
+    revision: "main"
 ```
 
 ## Example: pin a dataset version
@@ -213,7 +241,7 @@ For training, `prepared` mode is usually better because it can be loaded directl
 ```python
 from datasets import load_from_disk
 
-ds = load_from_disk("./offline_dataset")
+ds = load_from_disk("./ultrachat_200k")
 ```
 
 ## Troubleshooting
@@ -253,18 +281,6 @@ Set:
 ```bash
 export HF_HUB_OFFLINE=1
 export HF_DATASETS_OFFLINE=1
-```
-
-Also make sure your training code uses:
-
-```python
-load_from_disk("./offline_dataset")
-```
-
-instead of:
-
-```python
-load_dataset("owner/dataset_name")
 ```
 
 ## Full offline training example

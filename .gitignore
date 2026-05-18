@@ -1,1 +1,4 @@
 offline_datasets/*
+__pycache__/
+
+.venv

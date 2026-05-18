@@ -1,22 +1,104 @@
 import argparse
 import json
 import os
+import re
 import tarfile
 from pathlib import Path
 
-import yaml
-
 
 def load_config(path: str) -> dict:
+    import yaml
+
     with open(path, "r", encoding="utf-8") as f:
         return yaml.safe_load(f)
 
 
 def make_tar_gz(source_dir: Path, archive_path: Path) -> None:
     archive_path.parent.mkdir(parents=True, exist_ok=True)
+    archive_arcname = None
+
+    try:
+        archive_relative = archive_path.resolve().relative_to(source_dir.resolve())
+        archive_arcname = (Path(source_dir.name) / archive_relative).as_posix()
+    except ValueError:
+        pass
+
+    def exclude_archive(tarinfo: tarfile.TarInfo):
+        if archive_arcname is not None and tarinfo.name == archive_arcname:
+            return None
+        return tarinfo
 
     with tarfile.open(archive_path, "w:gz") as tar:
-        tar.add(source_dir, arcname=source_dir.name)
+        tar.add(source_dir, arcname=source_dir.name, filter=exclude_archive)
+
+
+def dataset_folder_name(dataset_id: str) -> str:
+    name = dataset_id.rstrip("/").split("/")[-1]
+    name = re.sub(r"[^A-Za-z0-9._-]+", "_", name).strip("._")
+
+    if not name:
+        raise ValueError(f"Could not derive a folder name from dataset_id: {dataset_id!r}")
+
+    return name
+
+
+def resolve_dataset_paths(cfg: dict) -> dict:
+    cfg = cfg.copy()
+
+    dataset_id = cfg["dataset_id"]
+    folder_name = dataset_folder_name(dataset_id)
+    base_output_dir = Path(cfg.get("output_dir", "./offline_datasets"))
+
+    # Preserve existing configs that already point directly at the dataset folder.
+    if base_output_dir.name == folder_name:
+        output_dir = base_output_dir
+    else:
+        output_dir = base_output_dir / folder_name
+
+    archive_path = cfg.get("archive_path")
+    if archive_path is None:
+        archive_path = output_dir / f"{folder_name}.tar.gz"
+    else:
+        archive_path = Path(archive_path)
+
+    cfg["output_dir"] = str(output_dir)
+    cfg["archive_path"] = str(archive_path)
+
+    return cfg
+
+
+def iter_dataset_configs(config: dict) -> list[dict]:
+    if "datasets" not in config:
+        return [resolve_dataset_paths(config)]
+
+    datasets = config["datasets"]
+    if not isinstance(datasets, list) or not datasets:
+        raise ValueError("datasets must be a non-empty list")
+
+    defaults = {key: value for key, value in config.items() if key != "datasets"}
+    resolved_configs = []
+
+    for index, dataset_cfg in enumerate(datasets, start=1):
+        if not isinstance(dataset_cfg, dict):
+            raise ValueError(f"datasets[{index}] must be a mapping")
+
+        merged_cfg = defaults.copy()
+        merged_cfg.update(dataset_cfg)
+
+        if "dataset_id" not in merged_cfg:
+            raise ValueError(f"datasets[{index}] is missing required field: dataset_id")
+
+        resolved_configs.append(resolve_dataset_paths(merged_cfg))
+
+    output_dirs = [cfg["output_dir"] for cfg in resolved_configs]
+    if len(output_dirs) != len(set(output_dirs)):
+        raise ValueError("Multiple datasets resolve to the same output_dir")
+
+    archive_paths = [cfg["archive_path"] for cfg in resolved_configs]
+    if len(archive_paths) != len(set(archive_paths)):
+        raise ValueError("Multiple datasets resolve to the same archive_path")
+
+    return resolved_configs
 
 
 def download_prepared_dataset(cfg: dict) -> None:
@@ -110,24 +192,31 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    cfg = load_config(args.config)
+    configs = iter_dataset_configs(load_config(args.config))
+    archive_paths = []
 
-    mode = cfg.get("mode", "prepared")
-    output_dir = Path(cfg["output_dir"])
-    archive_path = Path(cfg["archive_path"])
+    for cfg in configs:
+        mode = cfg.get("mode", "prepared")
+        output_dir = Path(cfg["output_dir"])
+        archive_path = Path(cfg["archive_path"])
 
-    if mode == "prepared":
-        download_prepared_dataset(cfg)
-    elif mode == "raw":
-        download_raw_dataset_repo(cfg)
-    else:
-        raise ValueError("mode must be either 'prepared' or 'raw'")
+        print(f"\nProcessing dataset: {cfg['dataset_id']}")
 
-    print(f"Creating archive: {archive_path}")
-    make_tar_gz(output_dir, archive_path)
+        if mode == "prepared":
+            download_prepared_dataset(cfg)
+        elif mode == "raw":
+            download_raw_dataset_repo(cfg)
+        else:
+            raise ValueError("mode must be either 'prepared' or 'raw'")
+
+        print(f"Creating archive: {archive_path}")
+        make_tar_gz(output_dir, archive_path)
+        archive_paths.append(archive_path)
 
     print("\nDone.")
-    print(f"Transfer this file to the offline machine:\n  {archive_path}")
+    print("Transfer these files to the offline machine:")
+    for archive_path in archive_paths:
+        print(f"  {archive_path}")
 
 
 if __name__ == "__main__":
