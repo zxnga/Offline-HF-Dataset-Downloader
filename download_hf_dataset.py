@@ -6,6 +6,11 @@ import tarfile
 from pathlib import Path
 
 
+DEFAULT_MODE = "prepared"
+VALID_MODES = {"prepared", "raw"}
+DEFAULT_FALLBACK_TO_RAW = False
+
+
 def load_config(path: str) -> dict:
     import yaml
 
@@ -42,8 +47,27 @@ def dataset_folder_name(dataset_id: str) -> str:
     return name
 
 
-def resolve_dataset_paths(cfg: dict) -> dict:
+def resolve_dataset_mode(cfg: dict, label: str) -> None:
+    mode = cfg.get("mode", DEFAULT_MODE)
+    if mode not in VALID_MODES:
+        valid_modes = ", ".join(f"{mode!r}" for mode in sorted(VALID_MODES))
+        raise ValueError(f"{label} mode must be one of {valid_modes}; got {mode!r}")
+
+    cfg["mode"] = mode
+
+
+def resolve_fallback_to_raw(cfg: dict, label: str) -> None:
+    fallback_to_raw = cfg.get("fallback_to_raw", DEFAULT_FALLBACK_TO_RAW)
+    if not isinstance(fallback_to_raw, bool):
+        raise ValueError(f"{label} fallback_to_raw must be true or false")
+
+    cfg["fallback_to_raw"] = fallback_to_raw
+
+
+def resolve_dataset_paths(cfg: dict, label: str) -> dict:
     cfg = cfg.copy()
+    resolve_dataset_mode(cfg, label)
+    resolve_fallback_to_raw(cfg, label)
 
     dataset_id = cfg["dataset_id"]
     folder_name = dataset_folder_name(dataset_id)
@@ -69,7 +93,10 @@ def resolve_dataset_paths(cfg: dict) -> dict:
 
 def iter_dataset_configs(config: dict) -> list[dict]:
     if "datasets" not in config:
-        return [resolve_dataset_paths(config)]
+        if "dataset_id" not in config:
+            raise ValueError("config is missing required field: dataset_id")
+
+        return [resolve_dataset_paths(config, "config")]
 
     datasets = config["datasets"]
     if not isinstance(datasets, list) or not datasets:
@@ -88,7 +115,7 @@ def iter_dataset_configs(config: dict) -> list[dict]:
         if "dataset_id" not in merged_cfg:
             raise ValueError(f"datasets[{index}] is missing required field: dataset_id")
 
-        resolved_configs.append(resolve_dataset_paths(merged_cfg))
+        resolved_configs.append(resolve_dataset_paths(merged_cfg, f"datasets[{index}]"))
 
     output_dirs = [cfg["output_dir"] for cfg in resolved_configs]
     if len(output_dirs) != len(set(output_dirs)):
@@ -158,6 +185,7 @@ def download_raw_dataset_repo(cfg: dict) -> None:
     revision = cfg.get("revision")
     output_dir = Path(cfg["output_dir"])
     token = os.environ.get(cfg.get("token_env", "HF_TOKEN"))
+    fallback_from_mode = cfg.get("fallback_from_mode")
 
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -177,10 +205,44 @@ def download_raw_dataset_repo(cfg: dict) -> None:
         "load_offline_with": "datasets.load_dataset using local files",
     }
 
+    if fallback_from_mode is not None:
+        manifest["fallback_from_mode"] = fallback_from_mode
+
     with open(output_dir / "offline_manifest.json", "w", encoding="utf-8") as f:
         json.dump(manifest, f, indent=2)
 
     print("Raw dataset files saved successfully.")
+
+
+def download_dataset(cfg: dict) -> None:
+    mode = cfg["mode"]
+
+    if mode == "raw":
+        download_raw_dataset_repo(cfg)
+        return
+
+    try:
+        download_prepared_dataset(cfg)
+    except Exception as prepared_error:
+        if not cfg["fallback_to_raw"]:
+            raise
+
+        print(
+            "Prepared mode failed; fallback_to_raw is enabled, "
+            "so trying raw mode instead."
+        )
+        print(f"Prepared error: {type(prepared_error).__name__}: {prepared_error}")
+
+        fallback_cfg = cfg.copy()
+        fallback_cfg["mode"] = "raw"
+        fallback_cfg["fallback_from_mode"] = "prepared"
+
+        try:
+            download_raw_dataset_repo(fallback_cfg)
+        except Exception as raw_error:
+            raise RuntimeError(
+                "Prepared mode failed, and raw fallback also failed."
+            ) from raw_error
 
 
 def main() -> None:
@@ -196,18 +258,13 @@ def main() -> None:
     archive_paths = []
 
     for cfg in configs:
-        mode = cfg.get("mode", "prepared")
+        mode = cfg["mode"]
         output_dir = Path(cfg["output_dir"])
         archive_path = Path(cfg["archive_path"])
 
-        print(f"\nProcessing dataset: {cfg['dataset_id']}")
+        print(f"\nProcessing dataset: {cfg['dataset_id']} (mode: {mode})")
 
-        if mode == "prepared":
-            download_prepared_dataset(cfg)
-        elif mode == "raw":
-            download_raw_dataset_repo(cfg)
-        else:
-            raise ValueError("mode must be either 'prepared' or 'raw'")
+        download_dataset(cfg)
 
         print(f"Creating archive: {archive_path}")
         make_tar_gz(output_dir, archive_path)

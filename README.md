@@ -36,6 +36,7 @@ Edit `dataset_config.yaml`:
 
 ```yaml
 mode: "prepared"
+fallback_to_raw: false
 output_dir: "./offline_datasets"
 archive_path: null
 token_env: "HF_TOKEN"
@@ -48,6 +49,8 @@ datasets:
     revision: "main"
 
   - dataset_id: "stanfordnlp/imdb"
+    mode: "raw"
+    fallback_to_raw: false
     config_name: null
     split: "train"
     revision: "main"
@@ -74,13 +77,14 @@ The dataset folder name is derived from the last part of `dataset_id`. For examp
 | `config_name` | Optional dataset subset/config name |
 | `split` | Optional split such as `"train"`, `"validation"`, or `"test"` |
 | `revision` | Dataset branch, tag, or commit hash |
-| `mode` | Use `"prepared"` for offline training |
+| `mode` | Use `"prepared"` for offline training or `"raw"` for original repo files |
+| `fallback_to_raw` | Set to `true` to try raw mode if prepared mode fails |
 | `output_dir` | Base folder where per-dataset folders are created |
 | `archive_path` | Optional archive file path. Set to `null` for the default per-dataset archive |
 | `token_env` | Environment variable containing your Hugging Face token |
 | `trust_remote_code` | Set to `true` only if the dataset requires custom dataset code |
 
-Top-level fields are defaults shared by every dataset. Dataset entries can override them when needed.
+Top-level fields are defaults shared by every dataset. Dataset entries can override them when needed, including `mode` and `fallback_to_raw`.
 
 ## Archive behavior
 
@@ -242,6 +246,24 @@ For training, `prepared` mode is usually better because it can be loaded directl
 from datasets import load_from_disk
 
 ds = load_from_disk("./ultrachat_200k")
+```
+
+## Fallback to raw mode
+
+If you want prepared mode first, but still want an archive of the raw repo files when `datasets.load_dataset()` fails, enable:
+
+```yaml
+mode: "prepared"
+fallback_to_raw: true
+```
+
+You can also enable it for only one dataset:
+
+```yaml
+datasets:
+  - dataset_id: "owner/dataset_name"
+    mode: "prepared"
+    fallback_to_raw: true
 ```
 
 ## Troubleshooting
