@@ -1,4 +1,5 @@
-offline_datasets/
+offline_datasets/*
+!offline_datasets/.gitkeep
 dataset_config.yaml
 __pycache__/
 .venv/
