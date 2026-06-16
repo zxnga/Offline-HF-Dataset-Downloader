@@ -1,0 +1,50 @@
+# "prepared" = load with datasets, then save_to_disk()
+# "raw" = download raw repo files
+mode: "raw"
+
+# If prepared mode fails, try downloading raw repo files instead.
+fallback_to_raw: false
+
+# Base folder where one subfolder per dataset will be created.
+output_dir: "./offline_datasets"
+
+# Optional archive path.
+# Set to null to create one archive inside each dataset folder:
+# ./offline_datasets/name_of_dataset/name_of_dataset.tar.gz
+archive_path: null
+
+# For private datasets, set this env var before running:
+# export HF_TOKEN="hf_..."
+token_env: "HF_TOKEN"
+
+# Set true only if the dataset requires custom code.
+trust_remote_code: false
+
+datasets:
+  # Hugging Face dataset repo ID.
+  - dataset_id: "AgentPublic/sp_questions_corpus"
+
+    # Optional dataset config/subset name.
+    # Ex: "default", "en", "20231101.en"
+    config_name: null
+
+    # Optional split (use null to download all splits)
+    # Ex: "train", "validation", "test"
+    split: null
+
+    # Usually "main", but can pin a commit hash or tag for reproducibility.
+    revision: "main"
+
+    # Optional: override the top-level mode for this dataset only.
+    # mode: "prepared"
+
+    # Optional: override the top-level fallback setting for this dataset only.
+    # fallback_to_raw: true
+
+  # Add more datasets here.
+  # - dataset_id: "another_org/another_dataset"
+  #   mode: "prepared"
+  #   fallback_to_raw: true
+  #   config_name: null
+  #   split: null
+  #   revision: "main"
