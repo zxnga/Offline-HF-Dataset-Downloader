@@ -1,6 +1,5 @@
-offline_datasets/*
-__pycache__/
-
-.venv
-
+offline_datasets/
 dataset_config.yaml
+__pycache__/
+.venv/
+*.tar.gz
