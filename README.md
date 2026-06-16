@@ -37,6 +37,7 @@ Edit `dataset_config.yaml`:
 ```yaml
 mode: "prepared"
 fallback_to_raw: false
+keep_only_archive: false
 output_dir: "./offline_datasets"
 archive_path: null
 token_env: "HF_TOKEN"
@@ -75,16 +76,20 @@ The dataset folder name is derived from the last part of `dataset_id`. For examp
 | `datasets` | List of datasets to download in one run |
 | `dataset_id` | Hugging Face dataset repo ID, for example `"HuggingFaceH4/ultrachat_200k"` |
 | `config_name` | Optional dataset subset/config name |
+| `config_names` | Optional list of subset/config names to download as separate prepared datasets |
 | `split` | Optional split such as `"train"`, `"validation"`, or `"test"` |
 | `revision` | Dataset branch, tag, or commit hash |
 | `mode` | Use `"prepared"` for offline training or `"raw"` for original repo files |
 | `fallback_to_raw` | Set to `true` to try raw mode if prepared mode fails |
+| `keep_only_archive` | Set to `true` to delete the downloaded dataset folder after the archive is created |
 | `output_dir` | Base folder where per-dataset folders are created |
 | `archive_path` | Optional archive file path. Set to `null` for the default per-dataset archive |
 | `token_env` | Environment variable containing your Hugging Face token |
 | `trust_remote_code` | Set to `true` only if the dataset requires custom dataset code |
 
-Top-level fields are defaults shared by every dataset. Dataset entries can override them when needed, including `mode` and `fallback_to_raw`.
+Top-level fields are defaults shared by every dataset. Dataset entries can override them when needed, including `mode`, `fallback_to_raw`, and `keep_only_archive`.
+
+Use `config_name` for one subset/config, or `config_names` for several. Do not set both on the same dataset entry.
 
 ## Archive behavior
 
@@ -94,7 +99,15 @@ When `archive_path` is `null`, each archive is written inside its dataset folder
 ./offline_datasets/ultrachat_200k/ultrachat_200k.tar.gz
 ```
 
+If `keep_only_archive` is `true`, the default archive path is moved outside the dataset folder so the folder can be removed safely:
+
+```text
+./offline_datasets/ultrachat_200k.tar.gz
+```
+
 You can still set `archive_path` for a single-dataset config or override it per dataset. Avoid using the same archive path for multiple datasets, because the script rejects duplicate archive outputs.
+
+When `keep_only_archive` is `true`, any custom `archive_path` must be outside that dataset's `output_dir`.
 
 ## Single-dataset config
 
@@ -106,6 +119,7 @@ config_name: null
 split: null
 revision: "main"
 mode: "prepared"
+keep_only_archive: false
 output_dir: "./offline_datasets"
 archive_path: null
 token_env: "HF_TOKEN"
@@ -218,6 +232,60 @@ datasets:
     revision: "main"
 ```
 
+## Example: keep only archives
+
+To keep only the `.tar.gz` files after each dataset is archived:
+
+```yaml
+mode: "prepared"
+keep_only_archive: true
+output_dir: "./offline_datasets"
+archive_path: null
+
+datasets:
+  - dataset_id: "HuggingFaceH4/ultrachat_200k"
+    split: null
+    revision: "main"
+```
+
+This leaves:
+
+```text
+offline_datasets/
+`-- ultrachat_200k.tar.gz
+```
+
+## Example: download multiple subsets
+
+Some Hugging Face datasets expose many subsets/configs. To download several of them in prepared mode, use `config_names`:
+
+```yaml
+mode: "prepared"
+output_dir: "./offline_datasets"
+archive_path: null
+
+datasets:
+  - dataset_id: "flax-sentence-embeddings/stackexchange_titlebody_best_voted_answer_jsonl"
+    config_names:
+      - "3dprinting"
+      - "android"
+      - "askubuntu"
+    split: "train"
+    revision: "main"
+```
+
+This creates one prepared dataset folder and archive per subset:
+
+```text
+offline_datasets/
+|-- stackexchange_titlebody_best_voted_answer_jsonl__3dprinting/
+|   `-- stackexchange_titlebody_best_voted_answer_jsonl__3dprinting.tar.gz
+|-- stackexchange_titlebody_best_voted_answer_jsonl__android/
+|   `-- stackexchange_titlebody_best_voted_answer_jsonl__android.tar.gz
+`-- stackexchange_titlebody_best_voted_answer_jsonl__askubuntu/
+    `-- stackexchange_titlebody_best_voted_answer_jsonl__askubuntu.tar.gz
+```
+
 ## Example: pin a dataset version
 
 For reproducibility, use a commit hash instead of `"main"`:
@@ -239,6 +307,7 @@ mode: "raw"
 This downloads the raw files from the Hugging Face dataset repository.
 
 Use raw mode only if you specifically need the original files, such as `.jsonl`, `.csv`, or `.parquet`.
+`config_names` is only supported in prepared mode because raw mode downloads the full dataset repository.
 
 For training, `prepared` mode is usually better because it can be loaded directly with:
 

@@ -2,6 +2,7 @@ import argparse
 import json
 import os
 import re
+import shutil
 import tarfile
 from pathlib import Path
 
@@ -9,6 +10,7 @@ from pathlib import Path
 DEFAULT_MODE = "prepared"
 VALID_MODES = {"prepared", "raw"}
 DEFAULT_FALLBACK_TO_RAW = False
+DEFAULT_KEEP_ONLY_ARCHIVE = False
 
 
 def load_config(path: str) -> dict:
@@ -37,12 +39,42 @@ def make_tar_gz(source_dir: Path, archive_path: Path) -> None:
         tar.add(source_dir, arcname=source_dir.name, filter=exclude_archive)
 
 
+def path_is_relative_to(path: Path, parent: Path) -> bool:
+    try:
+        path.resolve().relative_to(parent.resolve())
+        return True
+    except ValueError:
+        return False
+
+
+def remove_output_dir(output_dir: Path) -> None:
+    resolved_output_dir = output_dir.resolve()
+
+    if resolved_output_dir.parent == resolved_output_dir:
+        raise ValueError(f"Refusing to remove filesystem root: {output_dir}")
+
+    if not output_dir.exists():
+        return
+
+    print(f"Removing downloaded dataset folder: {output_dir}")
+    shutil.rmtree(output_dir)
+
+
 def dataset_folder_name(dataset_id: str) -> str:
     name = dataset_id.rstrip("/").split("/")[-1]
     name = re.sub(r"[^A-Za-z0-9._-]+", "_", name).strip("._")
 
     if not name:
         raise ValueError(f"Could not derive a folder name from dataset_id: {dataset_id!r}")
+
+    return name
+
+
+def config_folder_name(config_name: str) -> str:
+    name = re.sub(r"[^A-Za-z0-9._-]+", "_", config_name).strip("._")
+
+    if not name:
+        raise ValueError(f"Could not derive a folder name from config_name: {config_name!r}")
 
     return name
 
@@ -64,26 +96,85 @@ def resolve_fallback_to_raw(cfg: dict, label: str) -> None:
     cfg["fallback_to_raw"] = fallback_to_raw
 
 
+def resolve_keep_only_archive(cfg: dict, label: str) -> None:
+    keep_only_archive = cfg.get("keep_only_archive", DEFAULT_KEEP_ONLY_ARCHIVE)
+    if not isinstance(keep_only_archive, bool):
+        raise ValueError(f"{label} keep_only_archive must be true or false")
+
+    cfg["keep_only_archive"] = keep_only_archive
+
+
+def expand_config_names(cfg: dict, label: str) -> list[dict]:
+    if "config_names" not in cfg or cfg["config_names"] is None:
+        return [cfg]
+
+    if cfg.get("config_name") is not None:
+        raise ValueError(f"{label} cannot set both config_name and config_names")
+
+    if cfg.get("mode", DEFAULT_MODE) == "raw":
+        raise ValueError(f"{label} config_names can only be used with prepared mode")
+
+    config_names = cfg["config_names"]
+    if not isinstance(config_names, list) or not config_names:
+        raise ValueError(f"{label} config_names must be a non-empty list")
+
+    expanded_configs = []
+    seen_config_names = set()
+
+    for index, config_name in enumerate(config_names, start=1):
+        if not isinstance(config_name, str) or not config_name:
+            raise ValueError(f"{label} config_names[{index}] must be a non-empty string")
+
+        if config_name in seen_config_names:
+            raise ValueError(f"{label} config_names contains duplicate value: {config_name!r}")
+
+        seen_config_names.add(config_name)
+
+        expanded_cfg = cfg.copy()
+        expanded_cfg.pop("config_names", None)
+        expanded_cfg["config_name"] = config_name
+        expanded_cfg["_folder_suffix"] = config_folder_name(config_name)
+        expanded_configs.append(expanded_cfg)
+
+    return expanded_configs
+
+
 def resolve_dataset_paths(cfg: dict, label: str) -> dict:
     cfg = cfg.copy()
     resolve_dataset_mode(cfg, label)
     resolve_fallback_to_raw(cfg, label)
+    resolve_keep_only_archive(cfg, label)
 
     dataset_id = cfg["dataset_id"]
     folder_name = dataset_folder_name(dataset_id)
+    folder_suffix = cfg.pop("_folder_suffix", None)
+
+    if folder_suffix is not None:
+        folder_name = f"{folder_name}__{folder_suffix}"
+
     base_output_dir = Path(cfg.get("output_dir", "./offline_datasets"))
 
     # Preserve existing configs that already point directly at the dataset folder.
-    if base_output_dir.name == folder_name:
+    output_dir_is_dataset_folder = base_output_dir.name == folder_name
+    if output_dir_is_dataset_folder:
         output_dir = base_output_dir
     else:
         output_dir = base_output_dir / folder_name
 
     archive_path = cfg.get("archive_path")
     if archive_path is None:
-        archive_path = output_dir / f"{folder_name}.tar.gz"
+        if cfg["keep_only_archive"]:
+            archive_dir = output_dir.parent if output_dir_is_dataset_folder else base_output_dir
+            archive_path = archive_dir / f"{folder_name}.tar.gz"
+        else:
+            archive_path = output_dir / f"{folder_name}.tar.gz"
     else:
         archive_path = Path(archive_path)
+
+    if cfg["keep_only_archive"] and path_is_relative_to(archive_path, output_dir):
+        raise ValueError(
+            f"{label} archive_path must be outside output_dir when keep_only_archive is true"
+        )
 
     cfg["output_dir"] = str(output_dir)
     cfg["archive_path"] = str(archive_path)
@@ -96,7 +187,16 @@ def iter_dataset_configs(config: dict) -> list[dict]:
         if "dataset_id" not in config:
             raise ValueError("config is missing required field: dataset_id")
 
-        return [resolve_dataset_paths(config, "config")]
+        expanded_configs = expand_config_names(config, "config")
+        has_config_names = "config_names" in config and config["config_names"] is not None
+
+        return [
+            resolve_dataset_paths(
+                dataset_cfg,
+                f"config config_names[{index}]" if has_config_names else "config",
+            )
+            for index, dataset_cfg in enumerate(expanded_configs, start=1)
+        ]
 
     datasets = config["datasets"]
     if not isinstance(datasets, list) or not datasets:
@@ -115,7 +215,16 @@ def iter_dataset_configs(config: dict) -> list[dict]:
         if "dataset_id" not in merged_cfg:
             raise ValueError(f"datasets[{index}] is missing required field: dataset_id")
 
-        resolved_configs.append(resolve_dataset_paths(merged_cfg, f"datasets[{index}]"))
+        expanded_configs = expand_config_names(merged_cfg, f"datasets[{index}]")
+        has_config_names = "config_names" in merged_cfg and merged_cfg["config_names"] is not None
+
+        for config_index, expanded_cfg in enumerate(expanded_configs, start=1):
+            label = (
+                f"datasets[{index}] config_names[{config_index}]"
+                if has_config_names
+                else f"datasets[{index}]"
+            )
+            resolved_configs.append(resolve_dataset_paths(expanded_cfg, label))
 
     output_dirs = [cfg["output_dir"] for cfg in resolved_configs]
     if len(output_dirs) != len(set(output_dirs)):
@@ -157,7 +266,9 @@ def download_prepared_dataset(cfg: dict) -> None:
     # Remove empty values so public datasets work without a token.
     kwargs = {k: v for k, v in kwargs.items() if v is not None}
 
-    print(f"Downloading dataset with datasets.load_dataset(): {dataset_id}")
+    dataset_name = dataset_id if config_name is None else f"{dataset_id} ({config_name})"
+
+    print(f"Downloading dataset with datasets.load_dataset(): {dataset_name}")
     ds = load_dataset(**kwargs)
 
     print(f"Saving prepared dataset to: {output_dir}")
@@ -182,6 +293,7 @@ def download_raw_dataset_repo(cfg: dict) -> None:
     from huggingface_hub import snapshot_download
 
     dataset_id = cfg["dataset_id"]
+    config_name = cfg.get("config_name")
     revision = cfg.get("revision")
     output_dir = Path(cfg["output_dir"])
     token = os.environ.get(cfg.get("token_env", "HF_TOKEN"))
@@ -189,7 +301,9 @@ def download_raw_dataset_repo(cfg: dict) -> None:
 
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    print(f"Downloading raw dataset repo files: {dataset_id}")
+    dataset_name = dataset_id if config_name is None else f"{dataset_id} ({config_name})"
+
+    print(f"Downloading raw dataset repo files: {dataset_name}")
     snapshot_download(
         repo_id=dataset_id,
         repo_type="dataset",
@@ -200,6 +314,7 @@ def download_raw_dataset_repo(cfg: dict) -> None:
 
     manifest = {
         "dataset_id": dataset_id,
+        "config_name": config_name,
         "revision": revision,
         "mode": "raw",
         "load_offline_with": "datasets.load_dataset using local files",
@@ -261,14 +376,21 @@ def main() -> None:
         mode = cfg["mode"]
         output_dir = Path(cfg["output_dir"])
         archive_path = Path(cfg["archive_path"])
+        dataset_name = cfg["dataset_id"]
 
-        print(f"\nProcessing dataset: {cfg['dataset_id']} (mode: {mode})")
+        if cfg.get("config_name") is not None:
+            dataset_name = f"{dataset_name} ({cfg['config_name']})"
+
+        print(f"\nProcessing dataset: {dataset_name} (mode: {mode})")
 
         download_dataset(cfg)
 
         print(f"Creating archive: {archive_path}")
         make_tar_gz(output_dir, archive_path)
         archive_paths.append(archive_path)
+
+        if cfg["keep_only_archive"]:
+            remove_output_dir(output_dir)
 
     print("\nDone.")
     print("Transfer these files to the offline machine:")

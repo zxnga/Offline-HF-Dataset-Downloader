@@ -5,12 +5,14 @@ mode: "raw"
 # If prepared mode fails, try downloading raw repo files instead.
 fallback_to_raw: false
 
+# After creating the archive, remove the downloaded dataset folder.
+keep_only_archive: false
+
 # Base folder where one subfolder per dataset will be created.
 output_dir: "./offline_datasets"
 
 # Optional archive path.
-# Set to null to create one archive inside each dataset folder:
-# ./offline_datasets/name_of_dataset/name_of_dataset.tar.gz
+# Set to null to create one archive per dataset.
 archive_path: null
 
 # For private datasets, set this env var before running:
@@ -27,6 +29,13 @@ datasets:
     # Optional dataset config/subset name.
     # Ex: "default", "en", "20231101.en"
     config_name: null
+
+    # Optional list of dataset config/subset names.
+    # Use this instead of config_name to download several subsets as separate folders.
+    # Ex:
+    # config_names:
+    #   - "3dprinting"
+    #   - "android"
 
     # Optional split (use null to download all splits)
     # Ex: "train", "validation", "test"
@@ -46,5 +55,8 @@ datasets:
   #   mode: "prepared"
   #   fallback_to_raw: true
   #   config_name: null
+  #   # config_names:
+  #   #   - "subset_a"
+  #   #   - "subset_b"
   #   split: null
   #   revision: "main"
