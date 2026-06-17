@@ -156,16 +156,27 @@ def download_dataset(cfg: dict) -> dict:
             ) from raw_error
 
 
-def process_dataset(cfg: dict) -> dict:
+def download_dataset_job(cfg: dict) -> dict:
     mode = cfg["mode"]
     output_dir = Path(cfg["output_dir"])
-    archive_path = Path(cfg["archive_path"])
     dataset_name = dataset_display_name(cfg)
-    cleanup_error_message = None
 
     print(f"\nProcessing dataset: {dataset_name} (mode: {mode})")
 
     download_manifest = download_dataset(cfg)
+
+    return {
+        "status": "downloaded",
+        "final_mode": download_manifest["mode"],
+        "output_dir": str(output_dir),
+        "download_manifest": download_manifest,
+    }
+
+
+def archive_dataset(cfg: dict) -> dict:
+    output_dir = Path(cfg["output_dir"])
+    archive_path = Path(cfg["archive_path"])
+    cleanup_error_message = None
 
     print(f"Creating archive: {archive_path}")
     make_tar_gz(output_dir, archive_path)
@@ -181,10 +192,14 @@ def process_dataset(cfg: dict) -> dict:
             )
 
     return {
-        "status": "success",
-        "final_mode": download_manifest["mode"],
         "archive_path": str(archive_path),
         "output_dir": str(output_dir),
-        "download_manifest": download_manifest,
         "cleanup_error": cleanup_error_message,
     }
+
+
+def process_dataset(cfg: dict) -> dict:
+    result = download_dataset_job(cfg)
+    result.update(archive_dataset(cfg))
+    result["status"] = "success"
+    return result

@@ -3,7 +3,7 @@ from pathlib import Path
 
 from cache import hf_cache_context, resolve_keep_hf_cache
 from config import iter_dataset_configs
-from download import dataset_display_name, process_dataset
+from download import archive_dataset, dataset_display_name, download_dataset_job, process_dataset
 from manifest import (
     build_global_manifest,
     resolve_global_manifest_path,
@@ -11,6 +11,28 @@ from manifest import (
     write_global_manifest,
 )
 from utils import format_error, load_config
+
+
+def add_download_result_to_job(job_record: dict, result: dict) -> None:
+    job_record["final_mode"] = result["final_mode"]
+    job_record["output_dir"] = result["output_dir"]
+    job_record["download_manifest"] = result["download_manifest"]
+
+    for key in (
+        "fallback_from_mode",
+        "fallback_reason",
+        "prepared_error",
+        "config_discovery_error",
+        "load_offline_with",
+    ):
+        if key in result["download_manifest"]:
+            job_record[key] = result["download_manifest"][key]
+
+
+def add_archive_result_to_job(job_record: dict, result: dict) -> None:
+    job_record["archive_path"] = result["archive_path"]
+    job_record["output_dir"] = result["output_dir"]
+    job_record["cleanup_error"] = result["cleanup_error"]
 
 
 def main() -> None:
@@ -39,6 +61,7 @@ def main() -> None:
         print(f"Writing global manifest to: {global_manifest_path}")
 
         archive_paths = []
+        deferred_archive_jobs = []
         skipped_datasets = []
 
         for cfg in configs:
@@ -57,30 +80,26 @@ def main() -> None:
                 continue
 
             try:
-                result = process_dataset(cfg)
-                archive_paths.append(Path(result["archive_path"]))
+                if cfg["archive_timing"] == "end":
+                    result = download_dataset_job(cfg)
+                    job_record["status"] = "downloaded"
+                    job_record["stage"] = "downloaded"
+                    add_download_result_to_job(job_record, result)
+                    deferred_archive_jobs.append((cfg, job_record))
+                else:
+                    result = process_dataset(cfg)
+                    archive_paths.append(Path(result["archive_path"]))
 
-                job_record["status"] = "success"
-                job_record["stage"] = "completed"
-                job_record["final_mode"] = result["final_mode"]
-                job_record["archive_path"] = result["archive_path"]
-                job_record["output_dir"] = result["output_dir"]
-                job_record["download_manifest"] = result["download_manifest"]
-                job_record["cleanup_error"] = result["cleanup_error"]
-
-                for key in (
-                    "fallback_from_mode",
-                    "fallback_reason",
-                    "prepared_error",
-                    "config_discovery_error",
-                    "load_offline_with",
-                ):
-                    if key in result["download_manifest"]:
-                        job_record[key] = result["download_manifest"][key]
+                    job_record["status"] = "success"
+                    job_record["stage"] = "completed"
+                    add_download_result_to_job(job_record, result)
+                    add_archive_result_to_job(job_record, result)
             except Exception as error:
                 error_message = format_error(error)
                 job_record["status"] = "failed"
-                job_record["stage"] = "download_or_archive"
+                job_record["stage"] = (
+                    "download" if cfg["archive_timing"] == "end" else "download_or_archive"
+                )
                 job_record["error"] = error_message
                 job_record["continued_after_error"] = cfg["continue_on_error"]
                 update_global_manifest_status(global_manifest)
@@ -92,6 +111,40 @@ def main() -> None:
                 dataset_name = dataset_display_name(cfg)
                 print(
                     f"\nSkipping dataset after error: {dataset_name} "
+                    "(continue_on_error is enabled)"
+                )
+                print(f"Error: {error_message}")
+                skipped_datasets.append((dataset_name, error_message))
+
+            update_global_manifest_status(global_manifest)
+            write_global_manifest(global_manifest, global_manifest_path)
+
+    if deferred_archive_jobs:
+        print("\nCreating deferred archives.")
+
+        for cfg, job_record in deferred_archive_jobs:
+            try:
+                result = archive_dataset(cfg)
+                archive_paths.append(Path(result["archive_path"]))
+
+                job_record["status"] = "success"
+                job_record["stage"] = "completed"
+                add_archive_result_to_job(job_record, result)
+            except Exception as error:
+                error_message = format_error(error)
+                job_record["status"] = "failed"
+                job_record["stage"] = "archive"
+                job_record["error"] = error_message
+                job_record["continued_after_error"] = cfg["continue_on_error"]
+                update_global_manifest_status(global_manifest)
+                write_global_manifest(global_manifest, global_manifest_path)
+
+                if not cfg["continue_on_error"]:
+                    raise
+
+                dataset_name = dataset_display_name(cfg)
+                print(
+                    f"\nSkipping dataset archive after error: {dataset_name} "
                     "(continue_on_error is enabled)"
                 )
                 print(f"Error: {error_message}")

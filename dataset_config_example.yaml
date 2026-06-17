@@ -11,6 +11,10 @@ continue_on_error: false
 # After creating the archive, remove the downloaded dataset folder.
 keep_only_archive: false
 
+# "after_each" archives each dataset immediately after download.
+# "end" downloads all datasets first, then creates archives.
+archive_timing: "after_each"
+
 # Keep Hugging Face's persistent cache under your user cache directory.
 # Set false to use a temporary cache for this run and delete it afterward.
 keep_hf_cache: true
@@ -71,11 +75,15 @@ datasets:
     # Optional: override the top-level skip-on-error setting for this dataset only.
     # continue_on_error: true
 
+    # Optional: override when archives are created for this dataset only.
+    # archive_timing: "end"
+
   # Add more datasets here.
   # - dataset_id: "another_org/another_dataset"
   #   mode: "prepared"
   #   fallback_to_raw: true
   #   continue_on_error: true
+  #   archive_timing: "end"
   #   config_name: null
   #   # config_names:
   #   #   - "subset_a"

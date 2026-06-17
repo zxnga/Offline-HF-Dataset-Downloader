@@ -49,6 +49,7 @@ def make_dataset_manifest_record(cfg: dict) -> dict:
         "fallback_to_raw": cfg.get("fallback_to_raw"),
         "continue_on_error": cfg.get("continue_on_error"),
         "keep_only_archive": cfg.get("keep_only_archive"),
+        "archive_timing": cfg.get("archive_timing"),
         "status": "pending",
         "jobs": [],
     }
@@ -73,6 +74,7 @@ def make_job_manifest_record(cfg: dict, job_id: str) -> dict:
         "stage": None,
         "output_dir": cfg.get("output_dir"),
         "archive_path": cfg.get("archive_path"),
+        "archive_timing": cfg.get("archive_timing"),
         "fallback_to_raw": cfg.get("fallback_to_raw"),
         "fallback_from_mode": cfg.get("fallback_from_mode"),
         "fallback_reason": cfg.get("fallback_reason"),
@@ -139,7 +141,7 @@ def update_global_manifest_status(manifest: dict) -> None:
 
         if not statuses:
             dataset["status"] = "pending"
-        elif any(status == "pending" for status in statuses):
+        elif any(status in ("pending", "downloaded") for status in statuses):
             dataset["status"] = "pending"
         elif all(status == "success" for status in statuses):
             dataset["status"] = "success"
@@ -166,13 +168,14 @@ def update_global_manifest_status(manifest: dict) -> None:
         ),
         "jobs_total": len(all_jobs),
         "jobs_success": sum(job["status"] == "success" for job in all_jobs),
+        "jobs_downloaded": sum(job["status"] == "downloaded" for job in all_jobs),
         "jobs_failed": sum(job["status"] == "failed" for job in all_jobs),
         "jobs_skipped": sum(job["status"] == "skipped" for job in all_jobs),
         "jobs_pending": sum(job["status"] == "pending" for job in all_jobs),
     }
     manifest["summary"] = summary
 
-    if summary["jobs_pending"]:
+    if summary["jobs_pending"] or summary["jobs_downloaded"]:
         manifest["status"] = "pending"
     elif summary["jobs_failed"] or summary["jobs_skipped"] or summary["datasets_partial"]:
         manifest["status"] = "completed_with_errors"

@@ -46,6 +46,7 @@ mode: "prepared"
 fallback_to_raw: false
 continue_on_error: false
 keep_only_archive: false
+archive_timing: "after_each"
 keep_hf_cache: true
 all_config_names: false
 output_dir: "./offline_datasets"
@@ -95,6 +96,7 @@ The dataset folder name is derived from the last part of `dataset_id`. For examp
 | `fallback_to_raw` | Set to `true` to try raw mode if prepared mode fails |
 | `continue_on_error` | Set to `true` to skip datasets that still fail and continue the run |
 | `keep_only_archive` | Set to `true` to delete the downloaded dataset folder after the archive is created |
+| `archive_timing` | Use `"after_each"` to archive after every download, or `"end"` to download everything first and archive afterward |
 | `keep_hf_cache` | Set to `false` to use a temporary Hugging Face cache and delete it after the run |
 | `output_dir` | Base folder where per-dataset folders are created |
 | `archive_path` | Optional archive file path. Set to `null` for the default per-dataset archive |
@@ -102,7 +104,7 @@ The dataset folder name is derived from the last part of `dataset_id`. For examp
 | `token_env` | Environment variable containing your Hugging Face token |
 | `trust_remote_code` | Set to `true` only if the dataset requires custom dataset code |
 
-Top-level fields are defaults shared by every dataset. Dataset entries can override them when needed, including `mode`, `fallback_to_raw`, `continue_on_error`, `keep_only_archive`, and `all_config_names`. `keep_hf_cache` is a run-wide setting and should be set at the top level.
+Top-level fields are defaults shared by every dataset. Dataset entries can override them when needed, including `mode`, `fallback_to_raw`, `continue_on_error`, `keep_only_archive`, `archive_timing`, and `all_config_names`. `keep_hf_cache` is a run-wide setting and should be set at the top level.
 
 Use `config_name` for one subset/config, `config_names` for a specific list, or `all_config_names: true` to discover and download every subset/config. Do not set more than one of these on the same dataset entry.
 
@@ -125,6 +127,20 @@ If `keep_only_archive` is `true`, the default archive path is moved outside the 
 You can still set `archive_path` for a single-dataset config or override it per dataset. Avoid using the same archive path for multiple datasets, because the script rejects duplicate archive outputs.
 
 When `keep_only_archive` is `true`, any custom `archive_path` must be outside that dataset's `output_dir`.
+
+`archive_timing` controls when archives are created:
+
+```yaml
+archive_timing: "after_each"
+```
+
+This is the default. It downloads one dataset, creates its archive, and then removes the dataset folder if `keep_only_archive: true`. This usually uses less peak disk space.
+
+```yaml
+archive_timing: "end"
+```
+
+This downloads every dataset first and creates archives only after the download phase is complete. Use this when the internet connection window matters more than disk usage. It can require much more temporary disk space, because downloaded folders remain on disk until the archive phase. When `keep_only_archive: true`, folders are deleted after their archive is created during that final archive phase.
 
 ## Global run manifest
 
@@ -167,6 +183,7 @@ split: null
 revision: "main"
 mode: "prepared"
 keep_only_archive: false
+archive_timing: "after_each"
 keep_hf_cache: true
 output_dir: "./offline_datasets"
 archive_path: null
@@ -294,6 +311,7 @@ To keep only the `.tar.gz` files after each dataset is archived:
 ```yaml
 mode: "prepared"
 keep_only_archive: true
+archive_timing: "after_each"
 keep_hf_cache: false
 output_dir: "./offline_datasets"
 archive_path: null

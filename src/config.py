@@ -4,10 +4,12 @@ from pathlib import Path
 from archive import path_is_relative_to
 from constants import (
     DEFAULT_ALL_CONFIG_NAMES,
+    DEFAULT_ARCHIVE_TIMING,
     DEFAULT_CONTINUE_ON_ERROR,
     DEFAULT_FALLBACK_TO_RAW,
     DEFAULT_KEEP_ONLY_ARCHIVE,
     DEFAULT_MODE,
+    VALID_ARCHIVE_TIMINGS,
     VALID_MODES,
 )
 from utils import (
@@ -58,6 +60,20 @@ def resolve_continue_on_error(cfg: dict, label: str) -> None:
     cfg["continue_on_error"] = get_bool_setting(
         cfg, "continue_on_error", DEFAULT_CONTINUE_ON_ERROR, label
     )
+
+
+def resolve_archive_timing(cfg: dict, label: str) -> None:
+    archive_timing = cfg.get("archive_timing", DEFAULT_ARCHIVE_TIMING)
+    if archive_timing not in VALID_ARCHIVE_TIMINGS:
+        valid_timings = ", ".join(
+            f"{archive_timing!r}" for archive_timing in sorted(VALID_ARCHIVE_TIMINGS)
+        )
+        raise ValueError(
+            f"{label} archive_timing must be one of {valid_timings}; "
+            f"got {archive_timing!r}"
+        )
+
+    cfg["archive_timing"] = archive_timing
 
 
 def discover_config_names(cfg: dict, label: str) -> list[str]:
@@ -236,6 +252,7 @@ def resolve_dataset_paths(cfg: dict, label: str) -> dict:
     resolve_fallback_to_raw(cfg, label)
     resolve_keep_only_archive(cfg, label)
     resolve_continue_on_error(cfg, label)
+    resolve_archive_timing(cfg, label)
 
     dataset_id = cfg["dataset_id"]
     folder_name = dataset_folder_name(dataset_id)
