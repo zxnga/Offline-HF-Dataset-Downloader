@@ -9,6 +9,14 @@ This is useful when your training machine does not have internet access.
 .
 |-- dataset_config.yaml
 |-- download_hf_dataset.py
+|-- src/
+|   `-- offline_hf_datasets/
+|       |-- archive.py
+|       |-- cache.py
+|       |-- cli.py
+|       |-- config.py
+|       |-- download.py
+|       `-- manifest.py
 `-- README.md
 ```
 
@@ -37,9 +45,13 @@ Edit `dataset_config.yaml`:
 ```yaml
 mode: "prepared"
 fallback_to_raw: false
+continue_on_error: false
 keep_only_archive: false
+keep_hf_cache: true
+all_config_names: false
 output_dir: "./offline_datasets"
 archive_path: null
+global_manifest_path: null
 token_env: "HF_TOKEN"
 trust_remote_code: false
 
@@ -77,19 +89,25 @@ The dataset folder name is derived from the last part of `dataset_id`. For examp
 | `dataset_id` | Hugging Face dataset repo ID, for example `"HuggingFaceH4/ultrachat_200k"` |
 | `config_name` | Optional dataset subset/config name |
 | `config_names` | Optional list of subset/config names to download as separate prepared datasets |
+| `all_config_names` | Set to `true` to discover and download every subset/config as separate prepared datasets |
 | `split` | Optional split such as `"train"`, `"validation"`, or `"test"` |
 | `revision` | Dataset branch, tag, or commit hash |
 | `mode` | Use `"prepared"` for offline training or `"raw"` for original repo files |
 | `fallback_to_raw` | Set to `true` to try raw mode if prepared mode fails |
+| `continue_on_error` | Set to `true` to skip datasets that still fail and continue the run |
 | `keep_only_archive` | Set to `true` to delete the downloaded dataset folder after the archive is created |
+| `keep_hf_cache` | Set to `false` to use a temporary Hugging Face cache and delete it after the run |
 | `output_dir` | Base folder where per-dataset folders are created |
 | `archive_path` | Optional archive file path. Set to `null` for the default per-dataset archive |
+| `global_manifest_path` | Optional run manifest path. Set to `null` to write `download_manifest.json` under `output_dir` |
 | `token_env` | Environment variable containing your Hugging Face token |
 | `trust_remote_code` | Set to `true` only if the dataset requires custom dataset code |
 
-Top-level fields are defaults shared by every dataset. Dataset entries can override them when needed, including `mode`, `fallback_to_raw`, and `keep_only_archive`.
+Top-level fields are defaults shared by every dataset. Dataset entries can override them when needed, including `mode`, `fallback_to_raw`, `continue_on_error`, `keep_only_archive`, and `all_config_names`. `keep_hf_cache` is a run-wide setting and should be set at the top level.
 
-Use `config_name` for one subset/config, or `config_names` for several. Do not set both on the same dataset entry.
+Use `config_name` for one subset/config, `config_names` for a specific list, or `all_config_names: true` to discover and download every subset/config. Do not set more than one of these on the same dataset entry.
+
+If `all_config_names: true` is set at the top level, a dataset entry with `config_name` or `config_names` uses that explicit value instead. Raw-mode datasets do not use config expansion because raw mode downloads the full repository snapshot.
 
 ## Archive behavior
 
@@ -109,6 +127,36 @@ You can still set `archive_path` for a single-dataset config or override it per 
 
 When `keep_only_archive` is `true`, any custom `archive_path` must be outside that dataset's `output_dir`.
 
+## Global run manifest
+
+Each run writes a global manifest in addition to the per-dataset `offline_manifest.json` files. By default it is:
+
+```text
+./offline_datasets/download_manifest.json
+```
+
+Set a custom path with:
+
+```yaml
+global_manifest_path: "./offline_datasets/my_run_manifest.json"
+```
+
+The global manifest records each dataset, the config names that were specified or discovered, every expanded download job, the final mode used (`prepared` or `raw`), archive paths, raw fallback metadata, skipped datasets, and failures.
+
+## Hugging Face cache behavior
+
+By default, Hugging Face may cache downloads under your user cache directory. To avoid leaving new persistent Hugging Face cache files from this script, set:
+
+```yaml
+keep_hf_cache: false
+```
+
+The script then creates a temporary cache for the run, points `HF_HOME`, `HF_HUB_CACHE`, `HF_DATASETS_CACHE`, `HF_MODULES_CACHE`, `HF_ASSETS_CACHE`, and `HF_XET_CACHE` at it, and deletes that temporary cache before exiting.
+
+This does not delete cache files that already existed before the run.
+
+If you use `keep_hf_cache: false` for private or gated datasets, set `HF_TOKEN` in your environment instead of relying on a token saved by `huggingface-cli login`.
+
 ## Single-dataset config
 
 The script still accepts the older single-dataset shape:
@@ -120,8 +168,10 @@ split: null
 revision: "main"
 mode: "prepared"
 keep_only_archive: false
+keep_hf_cache: true
 output_dir: "./offline_datasets"
 archive_path: null
+global_manifest_path: null
 token_env: "HF_TOKEN"
 trust_remote_code: false
 ```
@@ -165,8 +215,14 @@ Transfer the generated `.tar.gz` files to the offline training machine.
 
 If the dataset requires authentication, create a Hugging Face access token and export it before running the script:
 
+For Linux/macOS:
 ```bash
 export HF_TOKEN="hf_your_token_here"
+```
+
+For Windows:
+```bash
+$env:HF_TOKEN="hf_your_token_here"
 ```
 
 Then run:
@@ -239,6 +295,7 @@ To keep only the `.tar.gz` files after each dataset is archived:
 ```yaml
 mode: "prepared"
 keep_only_archive: true
+keep_hf_cache: false
 output_dir: "./offline_datasets"
 archive_path: null
 
@@ -286,6 +343,26 @@ offline_datasets/
     `-- stackexchange_titlebody_best_voted_answer_jsonl__askubuntu.tar.gz
 ```
 
+To download every subset/config without listing them manually, use `all_config_names`:
+
+```yaml
+mode: "prepared"
+keep_only_archive: true
+keep_hf_cache: false
+output_dir: "./offline_datasets"
+archive_path: null
+
+datasets:
+  - dataset_id: "flax-sentence-embeddings/stackexchange_titlebody_best_voted_answer_jsonl"
+    all_config_names: true
+    split: "train"
+    revision: "main"
+```
+
+If automatic config discovery fails and `fallback_to_raw: true` is enabled, the script downloads that dataset in raw mode instead of stopping the whole run.
+
+If automatic config discovery fails and `fallback_to_raw: false`, setting `continue_on_error: true` skips that dataset and continues with the others.
+
 ## Example: pin a dataset version
 
 For reproducibility, use a commit hash instead of `"main"`:
@@ -307,7 +384,7 @@ mode: "raw"
 This downloads the raw files from the Hugging Face dataset repository.
 
 Use raw mode only if you specifically need the original files, such as `.jsonl`, `.csv`, or `.parquet`.
-`config_names` is only supported in prepared mode because raw mode downloads the full dataset repository.
+`config_names` and `all_config_names` are only supported in prepared mode because raw mode downloads the full dataset repository.
 
 For training, `prepared` mode is usually better because it can be loaded directly with:
 
@@ -324,6 +401,7 @@ If you want prepared mode first, but still want an archive of the raw repo files
 ```yaml
 mode: "prepared"
 fallback_to_raw: true
+continue_on_error: true
 ```
 
 You can also enable it for only one dataset:
@@ -333,7 +411,10 @@ datasets:
   - dataset_id: "owner/dataset_name"
     mode: "prepared"
     fallback_to_raw: true
+    continue_on_error: true
 ```
+
+If prepared mode fails, the script tries raw mode first when `fallback_to_raw: true`. If raw mode also fails and `continue_on_error: true`, that dataset is skipped and the next one starts.
 
 ## Troubleshooting
 

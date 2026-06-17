@@ -4,3 +4,5 @@ dataset_config.yaml
 __pycache__/
 .venv/
 *.tar.gz
+.env
+todo.md
