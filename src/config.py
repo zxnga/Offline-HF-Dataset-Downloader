@@ -1,8 +1,8 @@
 import os
 from pathlib import Path
 
-from .archive import path_is_relative_to
-from .constants import (
+from archive import path_is_relative_to
+from constants import (
     DEFAULT_ALL_CONFIG_NAMES,
     DEFAULT_CONTINUE_ON_ERROR,
     DEFAULT_FALLBACK_TO_RAW,
@@ -10,7 +10,7 @@ from .constants import (
     DEFAULT_MODE,
     VALID_MODES,
 )
-from .utils import (
+from utils import (
     config_folder_name,
     copy_string_list,
     dataset_folder_name,

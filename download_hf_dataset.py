@@ -8,7 +8,7 @@ SRC_DIR = PROJECT_ROOT / "src"
 if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
-from offline_hf_datasets.cli import main  # noqa: E402
+from cli import main  # noqa: E402
 
 
 if __name__ == "__main__":

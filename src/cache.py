@@ -3,8 +3,8 @@ import os
 import tempfile
 from pathlib import Path
 
-from .constants import DEFAULT_KEEP_HF_CACHE, HF_CACHE_ENV_VARS
-from .utils import get_bool_setting
+from constants import DEFAULT_KEEP_HF_CACHE, HF_CACHE_ENV_VARS
+from utils import get_bool_setting
 
 
 def resolve_keep_hf_cache(config: dict) -> bool:

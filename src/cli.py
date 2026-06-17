@@ -1,16 +1,16 @@
 import argparse
 from pathlib import Path
 
-from .cache import hf_cache_context, resolve_keep_hf_cache
-from .config import iter_dataset_configs
-from .download import dataset_display_name, process_dataset
-from .manifest import (
+from cache import hf_cache_context, resolve_keep_hf_cache
+from config import iter_dataset_configs
+from download import dataset_display_name, process_dataset
+from manifest import (
     build_global_manifest,
     resolve_global_manifest_path,
     update_global_manifest_status,
     write_global_manifest,
 )
-from .utils import format_error, load_config
+from utils import format_error, load_config
 
 
 def main() -> None:

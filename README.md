@@ -10,13 +10,12 @@ This is useful when your training machine does not have internet access.
 |-- dataset_config.yaml
 |-- download_hf_dataset.py
 |-- src/
-|   `-- offline_hf_datasets/
-|       |-- archive.py
-|       |-- cache.py
-|       |-- cli.py
-|       |-- config.py
-|       |-- download.py
-|       `-- manifest.py
+|   |-- archive.py
+|   |-- cache.py
+|   |-- cli.py
+|   |-- config.py
+|   |-- download.py
+|   `-- manifest.py
 `-- README.md
 ```
 

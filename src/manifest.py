@@ -2,11 +2,11 @@ from datetime import datetime, timezone
 import json
 from pathlib import Path
 
-from .constants import (
+from constants import (
     DEFAULT_GLOBAL_MANIFEST_FILENAME,
     DEFAULT_KEEP_ONLY_ARCHIVE,
 )
-from .utils import dataset_folder_name, get_bool_setting
+from utils import dataset_folder_name, get_bool_setting
 
 
 def utc_now_iso() -> str:

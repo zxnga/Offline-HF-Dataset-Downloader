@@ -2,8 +2,8 @@ import json
 import os
 from pathlib import Path
 
-from .archive import make_tar_gz, remove_output_dir
-from .utils import format_error
+from archive import make_tar_gz, remove_output_dir
+from utils import format_error
 
 
 def download_prepared_dataset(cfg: dict) -> dict:
