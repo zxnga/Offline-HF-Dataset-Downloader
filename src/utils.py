@@ -1,4 +1,5 @@
 import re
+from urllib.parse import quote
 
 
 def load_config(path: str) -> dict:
@@ -10,6 +11,11 @@ def load_config(path: str) -> dict:
 
 def format_error(error: Exception) -> str:
     return f"{type(error).__name__}: {error}"
+
+
+def huggingface_dataset_url(dataset_id: str) -> str:
+    encoded_dataset_id = quote(dataset_id.strip("/"), safe="/")
+    return f"https://huggingface.co/datasets/{encoded_dataset_id}"
 
 
 def dataset_folder_name(dataset_id: str) -> str:

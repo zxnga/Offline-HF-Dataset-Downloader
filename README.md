@@ -156,7 +156,7 @@ Set a custom path with:
 global_manifest_path: "./offline_datasets/my_run_manifest.json"
 ```
 
-The global manifest records each dataset, the config names that were specified or discovered, every expanded download job, the final mode used (`prepared` or `raw`), archive paths, raw fallback metadata, skipped datasets, and failures.
+The global manifest records each dataset, its Hugging Face dataset URL, the config names that were specified or discovered, every expanded download job, the final mode used (`prepared` or `raw`), archive paths, raw fallback metadata, skipped datasets, and failures.
 
 ## Hugging Face cache behavior
 

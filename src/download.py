@@ -3,7 +3,7 @@ import os
 from pathlib import Path
 
 from archive import make_tar_gz, remove_output_dir
-from utils import format_error
+from utils import format_error, huggingface_dataset_url
 
 
 def download_prepared_dataset(cfg: dict) -> dict:
@@ -45,6 +45,7 @@ def download_prepared_dataset(cfg: dict) -> dict:
 
     manifest = {
         "dataset_id": dataset_id,
+        "dataset_url": huggingface_dataset_url(dataset_id),
         "config_name": config_name,
         "split": split,
         "revision": revision,
@@ -87,6 +88,7 @@ def download_raw_dataset_repo(cfg: dict) -> dict:
 
     manifest = {
         "dataset_id": dataset_id,
+        "dataset_url": huggingface_dataset_url(dataset_id),
         "config_name": config_name,
         "revision": revision,
         "mode": "raw",

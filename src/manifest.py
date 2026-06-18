@@ -6,7 +6,7 @@ from constants import (
     DEFAULT_GLOBAL_MANIFEST_FILENAME,
     DEFAULT_KEEP_ONLY_ARCHIVE,
 )
-from utils import dataset_folder_name, get_bool_setting
+from utils import dataset_folder_name, get_bool_setting, huggingface_dataset_url
 
 
 def utc_now_iso() -> str:
@@ -37,6 +37,7 @@ def make_dataset_manifest_record(cfg: dict) -> dict:
         "label": cfg.get("_manifest_group_label"),
         "dataset_index": cfg.get("_manifest_group_index"),
         "dataset_id": cfg["dataset_id"],
+        "dataset_url": huggingface_dataset_url(cfg["dataset_id"]),
         "requested_mode": cfg.get("_manifest_requested_mode", cfg.get("mode")),
         "config_selection": cfg.get("_manifest_config_selection"),
         "config_names_source": cfg.get("_manifest_config_names_source"),
@@ -66,6 +67,7 @@ def make_job_manifest_record(cfg: dict, job_id: str) -> dict:
         "job_id": job_id,
         "label": cfg.get("_manifest_job_label"),
         "dataset_id": cfg["dataset_id"],
+        "dataset_url": huggingface_dataset_url(cfg["dataset_id"]),
         "config_name": cfg.get("config_name"),
         "requested_mode": cfg.get("_manifest_requested_mode", cfg.get("mode")),
         "planned_mode": cfg.get("mode"),
