@@ -1,7 +1,12 @@
 import argparse
 from pathlib import Path
 
-from cache import hf_cache_context, resolve_keep_hf_cache
+from cache import (
+    hf_cache_context,
+    resolve_cleanup_hf_cache_between_datasets,
+    resolve_hf_cache_dir,
+    resolve_keep_hf_cache,
+)
 from config import iter_dataset_configs
 from download import archive_dataset, dataset_display_name, download_dataset_job, process_dataset
 from manifest import (
@@ -46,9 +51,18 @@ def main() -> None:
 
     config = load_config(args.config)
     keep_hf_cache = resolve_keep_hf_cache(config)
+    cleanup_hf_cache_between_datasets = resolve_cleanup_hf_cache_between_datasets(
+        config,
+        keep_hf_cache,
+    )
+    hf_cache_dir = resolve_hf_cache_dir(config)
     global_manifest_path = resolve_global_manifest_path(config)
 
-    with hf_cache_context(keep_hf_cache):
+    with hf_cache_context(
+        keep_hf_cache,
+        hf_cache_dir,
+        cleanup_between_datasets=cleanup_hf_cache_between_datasets,
+    ) as cache_manager:
         configs = iter_dataset_configs(config)
         global_manifest, job_records = build_global_manifest(
             args.config,
@@ -118,6 +132,7 @@ def main() -> None:
 
             update_global_manifest_status(global_manifest)
             write_global_manifest(global_manifest, global_manifest_path)
+            cache_manager.cleanup_after_dataset()
 
     if deferred_archive_jobs:
         print("\nCreating deferred archives.")

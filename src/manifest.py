@@ -107,6 +107,10 @@ def build_global_manifest(
         "config_path": str(Path(config_path).resolve()),
         "global_manifest_path": str(manifest_path),
         "keep_hf_cache": keep_hf_cache,
+        "hf_cache_dir": config.get("hf_cache_dir"),
+        "cleanup_hf_cache_between_datasets": config.get(
+            "cleanup_hf_cache_between_datasets"
+        ),
         "status": "pending",
         "summary": {},
         "datasets": [],

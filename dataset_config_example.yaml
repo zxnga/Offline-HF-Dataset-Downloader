@@ -19,6 +19,13 @@ archive_timing: "after_each"
 # Set false to use a temporary cache for this run and delete it afterward.
 keep_hf_cache: true
 
+# Optional cache root. Use this to move Hugging Face cache/temp files to another disk.
+# With keep_hf_cache: false, a temporary subfolder is created here and deleted after the run.
+hf_cache_dir: null
+
+# If keep_hf_cache is false, clear the temporary HF cache after each dataset job.
+cleanup_hf_cache_between_datasets: false
+
 # Discover and download every dataset config/subset by default.
 all_config_names: false
 

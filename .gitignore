@@ -1,8 +1,11 @@
 offline_datasets/*
+config_run/
 !offline_datasets/.gitkeep
 dataset_config.yaml
 __pycache__/
 .venv/
 *.tar.gz
+*.yaml
+!dataset_config_example.yaml
 .env
 todo.md

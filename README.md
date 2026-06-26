@@ -48,6 +48,8 @@ continue_on_error: false
 keep_only_archive: false
 archive_timing: "after_each"
 keep_hf_cache: true
+hf_cache_dir: null
+cleanup_hf_cache_between_datasets: false
 all_config_names: false
 output_dir: "./offline_datasets"
 archive_path: null
@@ -98,6 +100,8 @@ The dataset folder name is derived from the last part of `dataset_id`. For examp
 | `keep_only_archive` | Set to `true` to delete the downloaded dataset folder after the archive is created |
 | `archive_timing` | Use `"after_each"` to archive after every download, or `"end"` to download everything first and archive afterward |
 | `keep_hf_cache` | Set to `false` to use a temporary Hugging Face cache and delete it after the run |
+| `hf_cache_dir` | Optional Hugging Face cache root. Use this to move cache/temp files to another disk |
+| `cleanup_hf_cache_between_datasets` | With `keep_hf_cache: false`, clear the temporary HF cache after each dataset job |
 | `output_dir` | Base folder where per-dataset folders are created |
 | `archive_path` | Optional archive file path. Set to `null` for the default per-dataset archive |
 | `global_manifest_path` | Optional run manifest path. Set to `null` to write `download_manifest.json` under `output_dir` |
@@ -170,6 +174,24 @@ The script then creates a temporary cache for the run, points `HF_HOME`, `HF_HUB
 
 This does not delete cache files that already existed before the run.
 
+Hugging Face still needs working cache space while downloading. To move that disk usage to another drive, set `hf_cache_dir`:
+
+```yaml
+keep_hf_cache: false
+hf_cache_dir: "D:/hf_temp_cache"
+```
+
+With `keep_hf_cache: false`, the script creates a temporary `offline_hf_cache_*` folder inside `hf_cache_dir` and deletes it after the run. With `keep_hf_cache: true`, the script uses `hf_cache_dir` as a persistent cache root and does not delete it.
+
+For long config files, you can also clear the temporary Hugging Face cache after each dataset job:
+
+```yaml
+keep_hf_cache: false
+cleanup_hf_cache_between_datasets: true
+```
+
+This only works with `keep_hf_cache: false`. It cleans the script-managed `offline_hf_cache_*` folder between datasets and leaves persistent/user Hugging Face caches alone.
+
 If you use `keep_hf_cache: false` for private or gated datasets, set `HF_TOKEN` in your environment instead of relying on a token saved by `huggingface-cli login`.
 
 ## Single-dataset config
@@ -185,6 +207,8 @@ mode: "prepared"
 keep_only_archive: false
 archive_timing: "after_each"
 keep_hf_cache: true
+hf_cache_dir: null
+cleanup_hf_cache_between_datasets: false
 output_dir: "./offline_datasets"
 archive_path: null
 global_manifest_path: null
