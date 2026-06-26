@@ -425,7 +425,7 @@ mode: "raw"
 This downloads the raw files from the Hugging Face dataset repository.
 
 Use raw mode only if you specifically need the original files, such as `.jsonl`, `.csv`, or `.parquet`.
-`config_names` and `all_config_names` are only supported in prepared mode because raw mode downloads the full dataset repository.
+`config_name`, `config_names`, and `all_config_names` are only supported in prepared mode because raw mode downloads the full dataset repository.
 
 For training, `prepared` mode is usually better because it can be loaded directly with:
 

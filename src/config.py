@@ -139,6 +139,12 @@ def expand_config_names(cfg: dict, label: str) -> list[dict]:
     cfg["_manifest_requested_all_config_names"] = all_config_names
 
     if mode == "raw":
+        if has_config_name or has_config_names or all_config_names:
+            raise ValueError(
+                f"{label} cannot set config_name, config_names, or "
+                "all_config_names with raw mode"
+            )
+
         set_config_selection_metadata(
             cfg,
             "raw_repo",
@@ -340,8 +346,13 @@ def iter_dataset_configs(config: dict) -> list[dict]:
         if has_dataset_config_selector and "all_config_names" not in dataset_cfg:
             merged_cfg["all_config_names"] = False
 
-        if dataset_cfg.get("mode") == "raw" and "all_config_names" not in dataset_cfg:
-            merged_cfg["all_config_names"] = False
+        if dataset_cfg.get("mode") == "raw":
+            if "config_name" not in dataset_cfg:
+                merged_cfg.pop("config_name", None)
+            if "config_names" not in dataset_cfg:
+                merged_cfg.pop("config_names", None)
+            if "all_config_names" not in dataset_cfg:
+                merged_cfg["all_config_names"] = False
 
         expanded_configs = expand_config_names(merged_cfg, f"datasets[{index}]")
         has_expanded_configs = (
